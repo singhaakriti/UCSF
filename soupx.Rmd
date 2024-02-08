@@ -1,0 +1,228 @@
+# This script runs soupX for single-cell data
+# Soupx detects and removes ambient RNA for QC purposes
+
+
+```{r}
+install.packages("SoupX")
+BiocManager::install("DropletUtils")
+```
+
+```{r}
+library(SoupX)
+library(Seurat)
+library(DropletUtils)
+```
+
+For SoupX - need filtered_feature_bc_matrix.h5 and raw_feature_bc_matrix.h5 files 
+Gets rid of ambient RNA - by comparing with raw file as threshold 
+
+Paths to filtered and raw files 
+```{r}
+filtered_ch_dev <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DEV_filtered_feature_bc_matrix.h5")
+raw_ch_dev <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DEV_raw_feature_bc_matrix.h5")
+```
+
+Make 'soup channel' object **Need to remove PEAKS information first 
+
+```{r}
+filtered_ch_dev <- filtered_ch_dev$`Gene Expression`
+filtered_ch_dev
+```
+
+```{r}
+raw_ch_dev <- raw_ch_dev$`Gene Expression`
+raw_ch_dev
+```
+
+
+```{r}
+sc_ch_dev <- SoupChannel(raw_ch_dev, filtered_ch_dev)
+```
+
+
+
+To run later 
+```{r}
+filtered_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_filtered_feature_bc_matrix.h5")
+filtered_ch_dia <- filtered_ch_dia$`Gene Expression`
+raw_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_raw_feature_bc_matrix.h5")
+raw_ch_dia <- raw_ch_dia$`Gene Expression`
+sc_ch_dia <- SoupChannel(raw_ch_dia, filtered_ch_dia)
+```
+
+```{r}
+filtered_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_filtered_feature_bc_matrix.h5")
+filtered_ch_dia <- filtered_ch_dia$`Gene Expression`
+raw_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_raw_feature_bc_matrix.h5")
+raw_ch_dia <- raw_ch_dia$`Gene Expression`
+sc_ch_dia <- SoupChannel(raw_ch_dia, filtered_ch_dia, keepDroplets = TRUE)
+```
+
+```{r}
+filtered_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_filtered_feature_bc_matrix.h5")
+filtered_ch_dia <- filtered_ch_dia$`Gene Expression`
+raw_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_raw_feature_bc_matrix.h5")
+raw_ch_dia <- raw_ch_dia$`Gene Expression`
+sc_ch_dia <- SoupChannel(raw_ch_dia, filtered_ch_dia, keepDroplets = TRUE)
+```
+
+```{r}
+sc_ch_dev$tod <- raw_ch_dev
+sc_ch_dev = estimateSoup(sc_ch_dev)
+```
+
+```{r}
+sc_ch_dev$soupProfile
+```
+
+Soupx needs clusters to run
+```{r}
+soupx_ch_dev_so <- CreateSeuratObject(counts = filtered_ch_dev)
+soupx_ch_dev_so <- NormalizeData(soupx_ch_dev_so)
+soupx_ch_dev_so <- FindVariableFeatures(object = soupx_ch_dev_so)
+soupx_ch_dev_so <- ScaleData(object = soupx_ch_dev_so)
+soupx_ch_dev_so <- RunPCA(object = soupx_ch_dev_so)
+soupx_ch_dev_so <- FindNeighbors(object = soupx_ch_dev_so, dims = 1:20) 
+soupx_ch_dev_so <- FindClusters(object = soupx_ch_dev_so)
+```
+Assign this cluster identity to the soupchannel object 
+```{r}
+meta <- soupx_ch_dev_so@meta.data
+sc_ch_dev <- setClusters(sc_ch_dev, setNames(meta$seurat_clusters, rownames(meta))) 
+```
+
+```{r}
+sc_ch_dev <- autoEstCont(sc_ch_dev)
+```
+
+```{r}
+head(sc_ch_dev$soupProfile[order(sc_ch_dev$soupProfile$est, decreasing = T), ], n = 20)
+# Looking at the top soup genes, we see high expression of mitochondrial genes and ribosomal genes (which is to be expected and means it is working!)
+```
+
+```{r}
+out_ch_dev <- adjustCounts(sc_ch_dev)
+```
+
+```{r}
+# Focus on genes for which there is a quantitative difference
+tail(sort(rowSums(sc_ch_dev$toc > out_ch_dev)/rowSums(sc_ch_dev$toc > 0)), n = 20)
+```
+```{r}
+DropletUtils:::write10xCounts("/Users/aakritisingh/Documents/SoupX_out_files/SoupX_out_ch_dev_counts", out_ch_dev)
+```
+
+
+
+---------------------------------------------------------------------------------------------------------------------------
+SoupX Pipeline
+
+```{r}
+# Load in filtered and raw files, filter out for gene expression only
+filtered_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_filtered_feature_bc_matrix.h5")
+filtered_ch_dia <- filtered_ch_dia$`Gene Expression`
+raw_ch_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_raw_feature_bc_matrix.h5")
+raw_ch_dia <- raw_ch_dia$`Gene Expression`
+sc_ch_dia <- SoupChannel(raw_ch_dia, filtered_ch_dia)
+
+# Estimate soup 
+sc_ch_dia$tod <- raw_ch_dia
+sc_ch_dia = estimateSoup(sc_ch_dia)
+
+# Get clusters
+soupx_ch_dia_so <- CreateSeuratObject(counts = filtered_ch_dia)
+soupx_ch_dia_so <- NormalizeData(soupx_ch_dia_so)
+soupx_ch_dia_so <- FindVariableFeatures(object = soupx_ch_dia_so)
+soupx_ch_dia_so <- ScaleData(object = soupx_ch_dia_so)
+soupx_ch_dia_so <- RunPCA(object = soupx_ch_dia_so)
+soupx_ch_dia_so <- FindNeighbors(object = soupx_ch_dia_so, dims = 1:20) 
+soupx_ch_dia_so <- FindClusters(object = soupx_ch_dia_so)
+
+# Assign cluster inforation to soupchannel object 
+meta <- soupx_ch_dia_so@meta.data
+sc_ch_dia <- setClusters(sc_ch_dia, setNames(meta$seurat_clusters, rownames(meta))) 
+
+# Estimate contamination
+sc_ch_dia <- autoEstCont(sc_ch_dia)
+
+# Look at top soup genes
+head(sc_ch_dia$soupProfile[order(sc_ch_dia$soupProfile$est, decreasing = T), ], n = 20)
+
+# Get corrected expression matrix and export 
+out_ch_dia <- adjustCounts(sc_ch_dia)
+DropletUtils:::write10xCounts("/Users/aakritisingh/Documents/SoupX_out_files/SoupX_out_ch_dia_counts", out_ch_dia)
+
+```
+
+
+```{r}
+# Load in filtered and raw files, filter out for gene expression only
+filtered_sg_dev <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/SG_DEV_filtered_feature_bc_matrix.h5")
+filtered_sg_dev <- filtered_sg_dev$`Gene Expression`
+raw_sg_dev <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/SG_DEV_raw_feature_bc_matrix.h5")
+raw_sg_dev <- raw_sg_dev$`Gene Expression`
+sc_sg_dev <- SoupChannel(raw_sg_dev, filtered_sg_dev)
+
+# Estimate soup 
+sc_sg_dev$tod <- raw_sg_dev
+sc_sg_dev = estimateSoup(sc_sg_dev)
+
+# Get clusters
+soupx_sg_dev_so <- CreateSeuratObject(counts = filtered_sg_dev)
+soupx_sg_dev_so <- NormalizeData(soupx_sg_dev_so)
+soupx_sg_dev_so <- FindVariableFeatures(object = soupx_sg_dev_so)
+soupx_sg_dev_so <- ScaleData(object = soupx_sg_dev_so)
+soupx_sg_dev_so <- RunPCA(object = soupx_sg_dev_so)
+soupx_sg_dev_so <- FindNeighbors(object = soupx_sg_dev_so, dims = 1:20) 
+soupx_sg_dev_so <- FindClusters(object = soupx_sg_dev_so)
+
+# Assign cluster inforation to soupchannel object 
+meta <- soupx_sg_dev_so@meta.data
+sc_sg_dev <- setClusters(sc_sg_dev, setNames(meta$seurat_clusters, rownames(meta))) 
+
+# Estimate contamination
+sc_sg_dev <- autoEstCont(sc_sg_dev)
+
+# Look at top soup genes
+head(sc_sg_dev$soupProfile[order(sc_sg_dev$soupProfile$est, decreasing = T), ], n = 20)
+
+# Get corrected expression matrix and export 
+out_sg_dev <- adjustCounts(sc_sg_dev)
+DropletUtils:::write10xCounts("/Users/aakritisingh/Documents/SoupX_out_files/SoupX_out_sg_dev_counts", out_sg_dev)
+```
+
+```{r}
+# Load in filtered and raw files, filter out for gene expression only
+filtered_sg_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/SG_DIA_filtered_feature_bc_matrix.h5")
+filtered_sg_dia <- filtered_sg_dia$`Gene Expression`
+raw_sg_dia <- Seurat::Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/SG_DIA_raw_feature_bc_matrix.h5")
+raw_sg_dia <- raw_sg_dia$`Gene Expression`
+sc_sg_dia <- SoupChannel(raw_sg_dia, filtered_sg_dia)
+
+# Estimate soup 
+sc_sg_dia$tod <- raw_sg_dia
+sc_sg_dia = estimateSoup(sc_sg_dia)
+
+# Get clusters
+soupx_sg_dia_so <- CreateSeuratObject(counts = filtered_sg_dia)
+soupx_sg_dia_so <- NormalizeData(soupx_sg_dia_so)
+soupx_sg_dia_so <- FindVariableFeatures(object = soupx_sg_dia_so)
+soupx_sg_dia_so <- ScaleData(object = soupx_sg_dia_so)
+soupx_sg_dia_so <- RunPCA(object = soupx_sg_dia_so)
+soupx_sg_dia_so <- FindNeighbors(object = soupx_sg_dia_so, dims = 1:20) 
+soupx_sg_dia_so <- FindClusters(object = soupx_sg_dia_so)
+
+# Assign cluster inforation to soupchannel object 
+meta <- soupx_sg_dia_so@meta.data
+sc_sg_dia <- setClusters(sc_sg_dia, setNames(meta$seurat_clusters, rownames(meta))) 
+
+# Estimate contamination
+sc_sg_dia <- autoEstCont(sc_sg_dia)
+
+# Look at top soup genes
+head(sc_sg_dia$soupProfile[order(sc_sg_dia$soupProfile$est, decreasing = T), ], n = 20)
+
+# Get corrected expression matrix and export 
+out_sg_dia <- adjustCounts(sc_sg_dia)
+DropletUtils:::write10xCounts("/Users/aakritisingh/Documents/SoupX_out_files/SoupX_out_sg_dia_counts", out_sg_dia)
+```
