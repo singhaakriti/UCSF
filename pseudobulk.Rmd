@@ -1,0 +1,265 @@
+# This script runs pseudobulk analysis for single-cell rna-seq data
+# Pseudobulk --> DESeq
+
+
+```{r}
+library(Seurat)
+library(DESeq2)
+library(tidyverse)
+
+```
+
+```{r}
+merged.subset
+```
+
+```{r}
+View(merged.subset@meta.data)
+```
+
+
+```{r}
+CH_DEV <- Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DEV_filtered_feature_bc_matrix.h5")
+so_CH_DEV <- CreateSeuratObject(counts = CH_DEV, project = "CH_Development")
+so_CH_DEV
+CH_DIA <- Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/CH_DIA_filtered_feature_bc_matrix.h5")
+so_CH_DIA <- CreateSeuratObject(counts = CH_DIA, project = "CH_Diapause")
+so_CH_DIA
+SG_DEV <- Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/SG_DEV_filtered_feature_bc_matrix.h5")
+so_SG_DEV <- CreateSeuratObject(counts = SG_DEV, project = "SG_Development")
+so_SG_DEV
+SG_DIA <- Read10X_h5("/Users/aakritisingh/Documents/MZM_genome_10x_out_files/SG_DIA_filtered_feature_bc_matrix.h5")
+so_SG_DIA <- CreateSeuratObject(counts = SG_DIA, project = "SG_Diapause")
+so_SG_DIA
+```
+
+```{r}
+so_CH_DIA[["RNA"]]$counts.Peaks <- NULL
+so_CH_DEV[["RNA"]]$counts.Peaks <- NULL
+so_SG_DIA[["RNA"]]$counts.Peaks <- NULL
+so_SG_DEV[["RNA"]]$counts.Peaks <- NULL
+```
+
+
+```{r}
+merged <- merge(so_CH_DEV, y = c(so_CH_DIA, so_SG_DEV, so_SG_DIA), add.cell.ids = c("CH_Development", "CH_Diapause", "SG_Development", "SG_Diapause"), project = "multiome")
+```
+
+
+```{r}
+VlnPlot(merged, features = c("nFeature_RNA"))
+```
+
+```{r}
+merged[["percent.mt"]] <- PercentageFeatureSet(merged, features = c("KEG92-p13", "KEG92-p12", "KEG92-p11", "KEG92-p10", "KEG92-p09", "KEG92-p08", "KEG92-p07", "KEG92-p06", "KEG92-p05", "KEG92-p04", "KEG92-p03", "KEG92-p02", "KEG92-p01"), assay = 'RNA')
+```
+
+```{r}
+VlnPlot(merged, features = c("nCount_RNA"))
+```
+```{r}
+VlnPlot(merged, features = c("percent.mt"))
+```
+```{r}
+merged.subset <- subset(merged, subset = nFeature_RNA > 200 & nFeature_RNA < 2000 & percent.mt < 8)
+```
+
+```{r}
+VlnPlot(merged.subset, features = c("nFeature_RNA"))
+```
+
+
+```{r}
+merged.subset <- NormalizeData(merged.subset)
+# merged.subset[["RNA"]]$counts.Peaks.CH_Development <- NULL
+# merged.subset[["RNA"]]$counts.Peaks.CH_Diapause <- NULL
+# merged.subset[["RNA"]]$counts.Peaks.SG_Development <- NULL
+# merged.subset[["RNA"]]$counts.Peaks.SG_Diapause <- NULL
+# merged.subset[["RNA"]]$data.Peaks.CH_Development <- NULL
+# merged.subset[["RNA"]]$data.Peaks.CH_Diapause <- NULL
+# merged.subset[["RNA"]]$data.Peaks.SG_Development <- NULL
+# merged.subset[["RNA"]]$data.Peaks.SG_Diapause <- NULL
+merged.subset <- FindVariableFeatures(merged.subset)
+merged.subset <- ScaleData(merged.subset)
+merged.subset <- RunPCA(merged.subset)
+ElbowPlot(merged.subset)
+```
+```{r}
+merged.subset <- RunUMAP(merged.subset, dims = 1:20)
+```
+
+```{r}
+DimPlot(merged.subset, reduction = "umap", group.by = "orig.ident", label = TRUE)
+```
+
+```{r}
+matrix_ch_dev <- so_CH_DEV$nFeature_RNA
+matrix_ch_dev <- as.data.frame(matrix_ch_dev)
+write_csv(matrix_ch_dev, "/Users/aakritisingh/Downloads/matrix_ch_dev.csv")
+
+matrix_ch_dia <- so_CH_DIA$nFeature_RNA
+matrix_ch_dia <- as.data.frame(matrix_ch_dia)
+write_csv(matrix_ch_dia, "/Users/aakritisingh/Downloads/matrix_ch_dia.csv")
+
+matrix_sg_dev <- so_SG_DEV$nFeature_RNA
+matrix_sg_dev <- as.data.frame(matrix_sg_dev)
+write_csv(matrix_sg_dev, "/Users/aakritisingh/Downloads/matrix_sg_dev.csv")
+
+matrix_sg_dia <- so_SG_DIA$nFeature_RNA
+matrix_sg_dia <- as.data.frame(matrix_sg_dia)
+write_csv(matrix_sg_dia, "/Users/aakritisingh/Downloads/matrix_sg_dia.csv")
+```
+
+
+```{r}
+matrix_ch_dev <- 
+matrix_ch_dev <- as.data.frame(matrix_ch_dev)
+write_csv(matrix_ch_dev, "/Users/aakritisingh/Downloads/matrix_ch_dev.csv")
+```
+
+
+```{r}
+DimPlot(merged.subset, reduction = "umap", group.by = "Condition")
+```
+Check default assay
+```{r}
+DefaultAssay(merged.subset)
+```
+
+Check counts matrix 
+```{r}
+merged.subset[["RNA"]]$`counts.Gene Expression.CH_Development`
+```
+
+View and check
+```{r}
+View(merged.subset@assays$RNA@features)
+```
+
+Aggregate counts across cells
+cts = counts
+
+Not grouped development and diapause
+```{r}
+cts_notgrouped <- AggregateExpression(merged.subset, group.by = "orig.ident", assays = "RNA", return.seurat = FALSE)
+```
+
+```{r}
+cts_notgrouped
+```
+
+
+```{r}
+cts_notgrouped_RNA <- cts_notgrouped$RNA
+cts_notgrouped_RNA
+```
+```{r}
+colData_notgrouped <- data.frame(samples = colnames(cts_notgrouped_RNA))
+```
+
+```{r}
+colData_notgrouped <- colData_notgrouped %>%
+  mutate(condition = ifelse(grepl('Development', samples), 'Development', 'Diapause')) %>%
+  column_to_rownames(var = 'samples')
+```
+
+```{r}
+colData_notgrouped
+```
+
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = cts_notgrouped_RNA, 
+                       colData = colData_notgrouped,
+                       design = ~condition)
+```
+
+```{r}
+keep <- rowSums(counts(dds)) <= 10
+dds <- dds[keep,]
+```
+
+```{r}
+dds <- DESeq(dds)
+```
+```{r}
+resultsNames(dds)
+```
+
+```{r}
+res <- results(dds, name = "condition_Diapause_vs_Development")
+```
+
+```{r}
+res
+```
+
+```{r}
+write_csv(res, path = "/Users/aakritisingh/Documents/differential_expression_psuedobulk_multiome2.csv")
+```
+
+```{r}
+resdf <- as.data.frame(res)
+```
+
+```{r}
+resdf
+```
+```{r}
+write_csv(resdf, "/Users/aakritisingh/Documents/differential_expression_psuedobulk_multiome2.csv")
+```
+
+```{r}
+resdf$Gene <- rownames(resdf)
+resdf <- resdf [, c(ncol(resdf), 1:(ncol(resdf)-1))]
+resdf
+```
+
+
+Now run DESeq analysis 
+```{r}
+colData <- data.frame(samples = colnames(cts_notgrouped_RNA))
+```
+
+group together
+```{r}
+colData <- colData %>%
+  mutate(condition = ifelse(grepl('Development', orig.ident), 'Development', 'Diapause')) %>% 
+  column_to_rownames(var = 'samples)
+```
+
+```{r}
+colData <- data.frame(samples = colnames(ctsrna))
+```
+
+```{r}
+DESeqDataSetFromMatrix(countData = ctsrna, 
+                       colData = colData,
+                       design = ~Condition)
+```
+
+```{r}
+colData <- colData %>%
+  mutate(condition = ifelse(grepl('Development', samples), 'Development', 'Diapause')) %>%
+  column_to_rownames(var = 'samples')
+```
+
+```{r}
+colData
+```
+Run DESEQ
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = ctsrna, 
+                       colData = colData,
+                       design = ~condition)
+```
+Filter
+remove genes lower than 10 reads 
+```{r}
+keep <- rowSums(counts(dds)) <= 10
+dds <- dds[keep,]
+```
+
+```{r}
+dds <- DESeq(dds)
+```
